@@ -1,0 +1,13 @@
+▲ Next.js 16.2.2 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://0.0.0.0:3000
+✓ Ready in 533ms
+
+○ Compiling / ...
+ GET / 307 in 10.7s (next.js: 10.5s, application-code: 232ms)
+○ Compiling /login ...
+ GET /login 200 in 6.3s (next.js: 6.1s, application-code: 214ms)
+ GET / 307 in 104ms (next.js: 33ms, application-code: 72ms)
+ GET /login 200 in 57ms (next.js: 4ms, application-code: 53ms)
+ GET / 307 in 551ms (next.js: 125ms, application-code: 426ms)
+ GET /login 200 in 117ms (next.js: 7ms, application-code: 111ms)

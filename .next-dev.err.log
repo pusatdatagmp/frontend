@@ -1,0 +1,2 @@
+[browser] Image with src "/_next/static/media/login.16aa0aea.svg" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
