@@ -425,7 +425,7 @@ export default function Page() {
                                         <td className="p-3">
                                             {filters.sort_field === "id"
                                                 ? row.id
-                                                : ((report.meta.current_page || 1) - 1) * (report.meta.per_page || 10) + index + 1}
+                                                : ((report?.meta?.current_page || 1) - 1) * (report?.meta.per_page || 10) + index + 1}
                                         </td>
                                         <td className="p-3">{row.nama_barang}</td>
                                         <td className="p-3">{row.nama_gudang ?? "-"}</td>
