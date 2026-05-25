@@ -95,7 +95,7 @@ export default function Page() {
 
     const [searchInput, setSearchInput] = useState("");
     const [search, setSearch] = useState("");
-    const [sortField, setSortField] = useState<keyof Product>("nama_barang");
+    const [sortField, setSortField] = useState<keyof Product>("id");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = useState(1);
     const perPage = 10;

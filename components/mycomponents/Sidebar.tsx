@@ -54,6 +54,7 @@ const menus = [
       { icon: <Banknote size={16} />, label: "Bank & Rekening", path: "/admin/master/bank" },
       { icon: <Building size={16} />, label: "Perusahaan", path: "/admin/master/perusahaan" },
       { icon: <ShieldCheck size={16} />, label: "Kategori & Satuan", path: "/admin/master/kategori" },
+      { icon: <ShieldCheck size={16} />, label: "Role", path: "/admin/master/role" },
     ],
   },
   {

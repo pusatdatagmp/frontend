@@ -53,7 +53,7 @@ export default function Page() {
     const [search, setSearch] = useState("");
 
     /* ================= SORT ================= */
-    const [sortField, setSortField] = useState<"nama" | "alamat">("nama");
+    const [sortField, setSortField] = useState<"id" | "nama" | "alamat">("id");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
     /* ================= PAGINATION ================= */

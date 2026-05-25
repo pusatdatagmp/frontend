@@ -60,8 +60,8 @@ export default function Page() {
     const [errorMessage, setErrorMessage] = useState("");
     const [searchInput, setSearchInput] = useState("");
     const [search, setSearch] = useState("");
-    const [sortField, setSortField] = useState<"id" | "created_at" | "user_name" | "module" | "action">("created_at");
-    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+    const [sortField, setSortField] = useState<"id" | "created_at" | "user_name" | "module" | "action">("id");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = useState(1);
     const perPage = 10;
 

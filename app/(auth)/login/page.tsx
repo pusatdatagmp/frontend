@@ -3,14 +3,13 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Shield, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import axios from "axios";
 
 export default function LoginPage() {
   const router = useRouter();
 
-  const [role, setRole] = useState<"admin" | "superadmin">("admin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,7 +26,6 @@ export default function LoginPage() {
       const res = await api.post("/auth/login", {
         email,
         password,
-        role,
       });
 
       const data = res.data;
@@ -37,8 +35,12 @@ export default function LoginPage() {
       localStorage.setItem("user", JSON.stringify(data.user));
 
       router.push("/admin");
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Login gagal");
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        setError(typeof err.response?.data?.message === "string" ? err.response.data.message : "Login gagal");
+      } else {
+        setError("Login gagal");
+      }
     } finally {
       setLoading(false);
     }
@@ -50,33 +52,6 @@ export default function LoginPage() {
       <p className="text-sm opacity-80">
         Login untuk melanjutkan ke sistem GMP.
       </p>
-
-      {/* ROLE */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          onClick={() => setRole("admin")}
-          className={`p-4 rounded-xl border ${role === "admin"
-            ? "border-primary bg-primary/10"
-            : ""
-            }`}
-        >
-          <UserCog className="w-6 h-6 mb-2" />
-          Admin
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setRole("superadmin")}
-          className={`p-4 rounded-xl border ${role === "superadmin"
-            ? "border-primary bg-primary/10"
-            : ""
-            }`}
-        >
-          <Shield className="w-6 h-6 mb-2" />
-          Super Admin
-        </button>
-      </div>
 
       {/* FORM */}
       <form onSubmit={handleLogin} className="space-y-4">
