@@ -13,6 +13,37 @@ import { DEFAULT_INVOICE_THEME_CODE, INVOICE_THEMES } from "@/lib/invoiceThemes"
 import axios from "axios";
 import { getSortClass } from "@/lib/getSortClass";
 
+const API_BASE_URL = api.defaults.baseURL ?? "";
+const API_ORIGIN = (() => {
+    if (!API_BASE_URL) {
+        return "";
+    }
+
+    try {
+        return new URL(API_BASE_URL, "http://localhost").origin;
+    } catch {
+        return "";
+    }
+})();
+
+const resolvePerusahaanLogoUrl = (item: Product): string | null => {
+    if (!item.logo_url) {
+        return null;
+    }
+
+    const previewUrl = API_ORIGIN ? `${API_ORIGIN}/api/perusahaan/${item.id}/logo` : item.logo_url;
+
+    if (API_ORIGIN && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(item.logo_url)) {
+        return previewUrl;
+    }
+
+    if (API_ORIGIN && item.logo_url.startsWith("/")) {
+        return previewUrl;
+    }
+
+    return previewUrl;
+};
+
 /* ================= TYPE ================= */
 type Product = {
     id: number;
@@ -191,7 +222,7 @@ export default function Page() {
             tema_invoice: item.tema_invoice || DEFAULT_INVOICE_THEME_CODE,
         });
         setLogoFile(null);
-        setLogoPreviewUrl(item.logo_url);
+        setLogoPreviewUrl(resolvePerusahaanLogoUrl(item));
         setEditId(item.id);
         setOpenForm(true);
     };
@@ -345,19 +376,14 @@ export default function Page() {
                                 <td className="p-3">{item.nama_pic}</td>
                                 <td className="p-3">{INVOICE_THEMES.find((theme) => theme.code === item.tema_invoice)?.label ?? "Maroon Klasik"}</td>
                                 <td className="p-3 text-center">
-                                    {item.logo_url ? (
+                                    {resolvePerusahaanLogoUrl(item) ? (
                                         <a
-                                            href={item.logo_url}
+                                            href={resolvePerusahaanLogoUrl(item) ?? "#"}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            title="Buka logo di tab baru"
-                                            className="inline-block"
+                                            className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
                                         >
-                                            <img
-                                                src={item.logo_url}
-                                                alt={`Logo ${item.nama_perusahaan}`}
-                                                className="mx-auto h-10 w-10 rounded object-contain border border-gray-200 bg-white p-1 cursor-pointer hover:opacity-80"
-                                            />
+                                            Lihat Logo
                                         </a>
                                     ) : (
                                         <span className="text-xs text-gray-400">-</span>

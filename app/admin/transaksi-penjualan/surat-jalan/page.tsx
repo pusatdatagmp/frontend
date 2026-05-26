@@ -27,15 +27,6 @@ type DriverOption = {
     status?: string;
 };
 
-type PerusahaanOption = {
-    id: number;
-    nama_perusahaan: string;
-    alamat: string;
-    nama_pic: string;
-    tema_invoice: string;
-    logo_url: string | null;
-};
-
 type SuratJalan = {
     id: number;
     nomor_surat_jalan: string;
@@ -45,13 +36,11 @@ type SuratJalan = {
     sppg_id: number | null;
     armada_id: number | null;
     driver_id: number | null;
-    perusahaan_id: number | null;
     sppg?: SppgOption | null;
     armada_ref?: ArmadaOption | null;
     driver?: DriverOption | null;
-    perusahaan_ref?: PerusahaanOption | null;
 };
-type SortField = keyof SuratJalan | "sppg" | "armada" | "no_pol" | "driver" | "perusahaan";
+type SortField = keyof SuratJalan | "sppg" | "armada" | "no_pol" | "driver";
 
 type FormType = {
     nomor_surat_jalan: string;
@@ -60,7 +49,6 @@ type FormType = {
     sppg_id: number | null;
     armada_id: number | null;
     driver_id: number | null;
-    perusahaan_id: number | null;
     status: "draft" | "selesai" | "batal";
 };
 
@@ -73,7 +61,6 @@ const initialForm: FormType = {
     sppg_id: null,
     armada_id: null,
     driver_id: null,
-    perusahaan_id: null,
     status: "draft",
 };
 
@@ -105,7 +92,6 @@ export default function Page() {
     const [sppgData, setSppgData] = useState<SppgOption[]>([]);
     const [armadaData, setArmadaData] = useState<ArmadaOption[]>([]);
     const [driverData, setDriverData] = useState<DriverOption[]>([]);
-    const [perusahaanData, setPerusahaanData] = useState<PerusahaanOption[]>([]);
     const [loadingOptions, setLoadingOptions] = useState(false);
 
     const [form, setForm] = useState<FormType>(initialForm);
@@ -131,7 +117,7 @@ export default function Page() {
             const response = await api.get<ApiListResponse<SuratJalan>>("/surat-jalan", {
                 params: {
                     search: search || undefined,
-                    sort_field: sortField === "sppg" || sortField === "armada" || sortField === "no_pol" || sortField === "driver" || sortField === "perusahaan"
+                    sort_field: sortField === "sppg" || sortField === "armada" || sortField === "no_pol" || sortField === "driver"
                         ? "tanggal"
                         : sortField,
                     sort_order: sortOrder,
@@ -149,21 +135,19 @@ export default function Page() {
 
     const fetchFormOptions = async () => {
         if (loadingOptions) return;
-        if (sppgData.length > 0 && armadaData.length > 0 && driverData.length > 0 && perusahaanData.length > 0) return;
+        if (sppgData.length > 0 && armadaData.length > 0 && driverData.length > 0) return;
 
         try {
             setLoadingOptions(true);
-            const [sppgRes, armadaRes, driverRes, perusahaanRes] = await Promise.all([
+            const [sppgRes, armadaRes, driverRes] = await Promise.all([
                 api.get<ApiListResponse<SppgOption>>("/sppg", { params: { per_page: 100 } }),
                 api.get<ApiListResponse<ArmadaOption>>("/armada", { params: { per_page: 100 } }),
                 api.get<ApiListResponse<DriverOption>>("/karyawan", { params: { search: "driver", per_page: 100 } }),
-                api.get<ApiListResponse<PerusahaanOption>>("/surat-jalan/opsi-perusahaan"),
             ]);
 
             setSppgData(sppgRes.data.data ?? []);
             setArmadaData(armadaRes.data.data ?? []);
             setDriverData(driverRes.data.data ?? []);
-            setPerusahaanData(perusahaanRes.data.data ?? []);
         } catch (error) {
             setErrorMessage(extractErrorMessage(error));
         } finally {
@@ -217,7 +201,6 @@ export default function Page() {
             sppg_id: item.sppg_id,
             armada_id: item.armada_id,
             driver_id: item.driver_id,
-            perusahaan_id: item.perusahaan_id,
             status: item.status,
         });
         setFieldErrors({});
@@ -231,7 +214,6 @@ export default function Page() {
 
         if (!form.nomor_surat_jalan.trim()) nextFieldErrors.nomor_surat_jalan = "Nomor surat jalan wajib diisi.";
         if (!form.tanggal) nextFieldErrors.tanggal = "Tanggal wajib diisi.";
-        if (!form.perusahaan_id) nextFieldErrors.perusahaan_id = "Perusahaan wajib dipilih.";
         if (!form.status) nextFieldErrors.status = "Status wajib dipilih.";
 
         if (Object.keys(nextFieldErrors).length > 0) {
@@ -253,7 +235,6 @@ export default function Page() {
                 sppg_id: form.sppg_id,
                 armada_id: form.armada_id,
                 driver_id: form.driver_id,
-                perusahaan_id: form.perusahaan_id,
                 status: form.status,
             };
 
@@ -327,14 +308,13 @@ export default function Page() {
 
     const totalPages = useMemo(() => Math.max(meta.last_page || 1, 1), [meta.last_page]);
     const sortedData = useMemo(() => {
-        if (!["sppg", "armada", "no_pol", "driver", "perusahaan"].includes(sortField)) return data;
+        if (!["sppg", "armada", "no_pol", "driver"].includes(sortField)) return data;
         const rows = [...data];
         rows.sort((a, b) => {
             const getValue = (item: SuratJalan) => {
                 if (sortField === "sppg") return item.sppg?.nama_sppg ?? "";
                 if (sortField === "armada") return item.armada_ref?.nama_unit ?? "";
                 if (sortField === "no_pol") return item.armada_ref?.no_pol ?? "";
-                if (sortField === "perusahaan") return item.perusahaan_ref?.nama_perusahaan ?? "";
                 return item.driver?.nama ?? "";
             };
             const aText = getValue(a).toLowerCase();
@@ -374,7 +354,7 @@ export default function Page() {
 
             <div className="flex items-center justify-between">
                 <input
-                    placeholder="Cari nomor surat jalan / no PO / perusahaan..."
+                    placeholder="Cari nomor surat jalan / no PO ..."
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     className="border p-2 rounded-md w-1/4 bg-white shadow"
@@ -435,11 +415,6 @@ export default function Page() {
                                 </button>
                             </th>
                             <th className="p-3">
-                                <button onClick={() => handleSort("perusahaan")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "perusahaan")}`}>
-                                    Perusahaan <ArrowUpDown size={14} />
-                                </button>
-                            </th>
-                            <th className="p-3">
                                 <button onClick={() => handleSort("status")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "status")}`}>
                                     Status <ArrowUpDown size={14} />
                                 </button>
@@ -462,7 +437,6 @@ export default function Page() {
                                     <td className="p-3">{item.armada_ref?.nama_unit ?? "-"}</td>
                                     <td className="p-3">{item.armada_ref?.no_pol ?? "-"}</td>
                                     <td className="p-3">{item.driver?.nama ?? "-"}</td>
-                                    <td className="p-3">{item.perusahaan_ref?.nama_perusahaan ?? "-"}</td>
                                     <td className="p-3 capitalize">{item.status}</td>
                                     <td className="p-3 flex justify-center gap-2">
                                         <button
@@ -488,7 +462,7 @@ export default function Page() {
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={11} className="p-6 text-center text-gray-500">
+                                <td colSpan={10} className="p-6 text-center text-gray-500">
                                     Belum ada data surat jalan.
                                 </td>
                             </tr>
@@ -540,7 +514,7 @@ export default function Page() {
                             ) : null}
                             {loadingOptions ? (
                                 <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                                    Memuat opsi SPPG, armada, driver, dan perusahaan...
+                                    Memuat opsi SPPG, armada, dan driver...
                                 </div>
                             ) : null}
 
@@ -627,23 +601,6 @@ export default function Page() {
                                     </option>
                                 ))}
                             </select>
-
-                            <select
-                                value={form.perusahaan_id ?? ""}
-                                onChange={(e) => {
-                                    setForm({ ...form, perusahaan_id: e.target.value ? Number(e.target.value) : null });
-                                    clearFieldError("perusahaan_id");
-                                }}
-                                className={`w-full border p-2 rounded-md ${fieldErrors.perusahaan_id ? "border-red-500 focus:outline-red-500" : ""}`}
-                            >
-                                <option value="">Pilih Perusahaan</option>
-                                {perusahaanData.map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                        {item.nama_perusahaan}
-                                    </option>
-                                ))}
-                            </select>
-                            {fieldErrors.perusahaan_id ? <p className="text-xs text-red-600 -mt-2">{fieldErrors.perusahaan_id}</p> : null}
 
                             <select
                                 value={form.status}

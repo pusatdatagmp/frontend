@@ -33,7 +33,8 @@ export default function Page() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
-    const [filterDate, setFilterDate] = useState("");
+    const [searchInput, setSearchInput] = useState("");
+    const [search, setSearch] = useState("");
 
     const [openForm, setOpenForm] = useState(false);
     const [tanggalPesan, setTanggalPesan] = useState("");
@@ -51,7 +52,7 @@ export default function Page() {
                 "/daftar-pembelanjaan",
                 {
                     params: {
-                        search: filterDate || undefined,
+                        search: search || undefined,
                         sort_field: sortField,
                         sort_order: sortOrder,
                         page: currentPage,
@@ -71,11 +72,16 @@ export default function Page() {
 
     useEffect(() => {
         void fetchData();
-    }, [currentPage, filterDate, sortField, sortOrder]);
+    }, [currentPage, search, sortField, sortOrder]);
 
     useEffect(() => {
-        setCurrentPage(1);
-    }, [filterDate]);
+        const timeout = window.setTimeout(() => {
+            setSearch(searchInput.trim());
+            setCurrentPage(1);
+        }, 300);
+
+        return () => window.clearTimeout(timeout);
+    }, [searchInput]);
 
     function handleSort(field: "id" | "tanggal_pesan") {
         if (sortField === field) {
@@ -130,10 +136,10 @@ export default function Page() {
 
             <div className="flex items-center justify-between gap-4">
                 <input
-                    type="date"
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    className="border p-2 rounded-md w-52 bg-white shadow"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder="Cari tanggal pesan..."
+                    className="border p-2 rounded-md w-64 bg-white shadow"
                 />
 
                 <button

@@ -25,15 +25,6 @@ type KaryawanOption = {
     nama: string;
 };
 
-type PerusahaanOption = {
-    id: number;
-    nama_perusahaan: string;
-    alamat: string;
-    nama_pic: string;
-    tema_invoice: string;
-    logo_url: string | null;
-};
-
 type TandaTerimaRecord = {
     id: number;
     nomor_tanda_terima: string;
@@ -45,25 +36,21 @@ type TandaTerimaRecord = {
     armada_id: number | null;
     akuntan_id: number | null;
     driver_id: number | null;
-    perusahaan_id: number | null;
     sppg?: SppgOption | null;
     armadaRef?: ArmadaOption | null;
     akuntan?: KaryawanOption | null;
     driver?: KaryawanOption | null;
-    perusahaanRef?: PerusahaanOption | null;
 };
-type SortField = "id" | "nomor_surat_jalan" | "no_po" | "tanggal" | "status" | "sppg" | "driver" | "perusahaan";
+type SortField = "id" | "nomor_surat_jalan" | "no_po" | "tanggal" | "status" | "sppg" | "driver";
 
 type FormType = {
     tanggal: string;
-    perusahaan_id: string;
 };
 
 type FieldErrors = Partial<Record<keyof FormType, string>>;
 
 const initialForm: FormType = {
     tanggal: "",
-    perusahaan_id: "",
 };
 
 const initialMeta: Meta = {
@@ -93,13 +80,11 @@ export default function Page() {
     const [meta, setMeta] = useState<Meta>(initialMeta);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-    const [loadingPerusahaanOptions, setLoadingPerusahaanOptions] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
     const [successMessage, setSuccessMessage] = useState("");
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
     const [form, setForm] = useState<FormType>(initialForm);
-    const [perusahaanOptions, setPerusahaanOptions] = useState<PerusahaanOption[]>([]);
     const [openForm, setOpenForm] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<TandaTerimaRecord | null>(null);
 
@@ -121,7 +106,7 @@ export default function Page() {
                 api.get<ApiListResponse<TandaTerimaRecord>>("/tanda-terima", {
                     params: {
                         search: search || undefined,
-                        sort_field: sortField === "sppg" || sortField === "driver" || sortField === "perusahaan" ? "tanggal" : sortField,
+                        sort_field: sortField === "sppg" || sortField === "driver" ? "tanggal" : sortField,
                         sort_order: sortOrder,
                         page: currentPage,
                         per_page: perPage,
@@ -138,20 +123,6 @@ export default function Page() {
         }
   }, [currentPage, perPage, search, sortField, sortOrder]);
 
-    const fetchPerusahaanOptions = useCallback(async () => {
-        if (loadingPerusahaanOptions || perusahaanOptions.length > 0) return;
-
-        try {
-            setLoadingPerusahaanOptions(true);
-            const response = await api.get<{ data: PerusahaanOption[] }>("/tanda-terima/opsi-perusahaan");
-            setPerusahaanOptions(response.data.data ?? []);
-        } catch (error) {
-            setErrorMessage(extractErrorMessage(error));
-        } finally {
-            setLoadingPerusahaanOptions(false);
-        }
-    }, [loadingPerusahaanOptions, perusahaanOptions.length]);
-
     useEffect(() => {
         const timeout = window.setTimeout(() => {
             setSearch(searchInput.trim());
@@ -164,12 +135,6 @@ export default function Page() {
     useEffect(() => {
         void fetchData();
     }, [fetchData]);
-
-    useEffect(() => {
-        if (openForm) {
-            void fetchPerusahaanOptions();
-        }
-    }, [openForm, fetchPerusahaanOptions]);
 
     const resetForm = () => {
         setForm(initialForm);
@@ -195,8 +160,6 @@ export default function Page() {
         const nextFieldErrors: FieldErrors = {};
 
         if (!form.tanggal) nextFieldErrors.tanggal = "Tanggal wajib diisi.";
-        if (!form.perusahaan_id) nextFieldErrors.perusahaan_id = "Perusahaan wajib dipilih.";
-
         if (Object.keys(nextFieldErrors).length > 0) {
             setFieldErrors(nextFieldErrors);
             setSuccessMessage("");
@@ -211,7 +174,6 @@ export default function Page() {
 
             await api.post("/tanda-terima", {
                 tanggal: form.tanggal,
-                perusahaan_id: Number(form.perusahaan_id),
             });
             setSuccessMessage("Data tanda terima berhasil disinkronkan dari surat jalan.");
 
@@ -276,22 +238,18 @@ export default function Page() {
     };
     const totalPages = useMemo(() => Math.max(meta.last_page || 1, 1), [meta.last_page]);
     const sortedRecords = useMemo(() => {
-        if (sortField !== "sppg" && sortField !== "driver" && sortField !== "perusahaan") return records;
+        if (sortField !== "sppg" && sortField !== "driver") return records;
         const rows = [...records];
         rows.sort((a, b) => {
             const aText = (
                 sortField === "sppg"
                     ? a.sppg?.nama_sppg
-                    : sortField === "driver"
-                        ? a.driver?.nama
-                        : a.perusahaanRef?.nama_perusahaan
+                    : a.driver?.nama
             )?.toLowerCase() || "";
             const bText = (
                 sortField === "sppg"
                     ? b.sppg?.nama_sppg
-                    : sortField === "driver"
-                        ? b.driver?.nama
-                        : b.perusahaanRef?.nama_perusahaan
+                    : b.driver?.nama
             )?.toLowerCase() || "";
             return sortOrder === "asc" ? aText.localeCompare(bText) : bText.localeCompare(aText);
         });
@@ -318,7 +276,7 @@ export default function Page() {
 
             <div className="flex items-center justify-between">
                 <input
-                    placeholder="Cari surat jalan / no PO / SPPG / perusahaan..."
+                    placeholder="Cari surat jalan / no PO / SPPG..."
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     className="border p-2 rounded-md w-1/4 min-w-60 bg-white shadow"
@@ -368,11 +326,6 @@ export default function Page() {
                                 </button>
                             </th>
                             <th className="p-3">
-                                <button onClick={() => handleSort("perusahaan")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "perusahaan")}`}>
-                                    Perusahaan <ArrowUpDown size={14} />
-                                </button>
-                            </th>
-                            <th className="p-3">
                                 <button onClick={() => handleSort("status")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "status")}`}>
                                     Status <ArrowUpDown size={14} />
                                 </button>
@@ -383,13 +336,13 @@ export default function Page() {
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan={9} className="p-6 text-center text-gray-500">
+                                <td colSpan={8} className="p-6 text-center text-gray-500">
                                     Memuat data...
                                 </td>
                             </tr>
                         ) : records.length === 0 ? (
                             <tr>
-                                <td colSpan={9} className="p-6 text-center text-gray-500">
+                                <td colSpan={8} className="p-6 text-center text-gray-500">
                                     Belum ada data tanda terima.
                                 </td>
                             </tr>
@@ -404,7 +357,6 @@ export default function Page() {
                                     <td className="p-3">{formatTanggal(item.tanggal)}</td>
                                     <td className="p-3">{item.sppg?.nama_sppg || "-"}</td>
                                     <td className="p-3">{item.driver?.nama || "-"}</td>
-                                    <td className="p-3">{item.perusahaanRef?.nama_perusahaan || "-"}</td>
                                     <td className="p-3 capitalize">{item.status}</td>
                                     <td className="p-3">
                                         <div className="flex justify-center gap-2">
@@ -481,27 +433,6 @@ export default function Page() {
                                     className={`w-full border p-2 rounded-md ${fieldErrors.tanggal ? "border-red-500 focus:outline-red-500" : ""}`}
                                 />
                                 {fieldErrors.tanggal ? <p className="text-xs text-red-600">{fieldErrors.tanggal}</p> : null}
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Perusahaan</label>
-                                <select
-                                    value={form.perusahaan_id}
-                                    onChange={(e) => {
-                                        setForm((prev) => ({ ...prev, perusahaan_id: e.target.value }));
-                                        clearFieldError("perusahaan_id");
-                                    }}
-                                    className={`w-full border p-2 rounded-md ${fieldErrors.perusahaan_id ? "border-red-500 focus:outline-red-500" : ""}`}
-                                    disabled={loadingPerusahaanOptions}
-                                >
-                                    <option value="">{loadingPerusahaanOptions ? "Memuat perusahaan..." : "Pilih Perusahaan"}</option>
-                                    {perusahaanOptions.map((option) => (
-                                        <option key={option.id} value={option.id}>
-                                            {option.nama_perusahaan}
-                                        </option>
-                                    ))}
-                                </select>
-                                {fieldErrors.perusahaan_id ? <p className="text-xs text-red-600">{fieldErrors.perusahaan_id}</p> : null}
                             </div>
 
                             <div className="flex justify-end gap-2">

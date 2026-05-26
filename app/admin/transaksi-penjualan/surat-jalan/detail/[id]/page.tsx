@@ -2,22 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { FileDown, Pencil, ArrowUpDown } from "lucide-react";
+import { FileDown, Pencil } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import api from "@/lib/api";
 import { getInvoiceTheme } from "@/lib/invoiceThemes";
 import { extractErrorMessage, type ApiListResponse, type Meta } from "@/lib/transaksiPembelian";
-import { getSortClass } from "@/lib/getSortClass";
 
 type SuratJalanItem = {
     id: number;
     penjualan_item_id: number | null;
+    perusahaan_id: number | null;
+    perusahaan?: PerusahaanRef | null;
     nama_barang: string;
     qty: number | string;
     satuan: string | null;
     keterangan: string | null;
+};
+
+type PerusahaanRef = {
+    id: number;
+    nama_perusahaan: string;
+    alamat?: string | null;
+    nama_pic?: string | null;
+    tema_invoice?: string | null;
+    logo_url?: string | null;
 };
 
 type SuratJalanDetail = {
@@ -101,7 +111,9 @@ const drawCompanyLogo = (doc: jsPDF, logoImage: string) => {
 
     const x = 18;
     const y = 8 + (maxHeight - renderHeight) / 2;
-    doc.addImage(logoImage, "PNG", x, y, renderWidth, renderHeight);
+
+    const imageFormat = logoImage.match(/data:image\/([\w+]+);/)?.[1]?.toUpperCase() || "PNG";
+    doc.addImage(logoImage, imageFormat, x, y, renderWidth, renderHeight);
 };
 
 const initialMeta: Meta = {
@@ -124,6 +136,19 @@ const formatTanggal = (value: string) => {
     });
 };
 
+const createCompanyKey = (perusahaanId?: number | null) =>
+    perusahaanId ? String(perusahaanId) : "tanpa-perusahaan";
+
+const createPdfFileName = (jenisDokumen: string, namaPerusahaan: string | null | undefined, tanggal: string | null | undefined) => {
+    const company = (namaPerusahaan || "tanpa-perusahaan")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    const date = (tanggal || new Date().toISOString().slice(0, 10)).replaceAll("-", "_");
+
+    return `${jenisDokumen}_${company}_${date}.pdf`;
+};
+
 export default function Page() {
     const params = useParams<{ id: string }>();
     const router = useRouter();
@@ -144,8 +169,9 @@ export default function Page() {
     const [openForm, setOpenForm] = useState(false);
     const [sortField, setSortField] = useState<keyof SuratJalanItem>("nama_barang");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+    const [selectedCompanyKey, setSelectedCompanyKey] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
-    const perPage = 10;
+    const perPage = 100;
 
     const fetchData = useCallback(async () => {
         try {
@@ -233,6 +259,42 @@ export default function Page() {
     };
 
     const totalPages = useMemo(() => Math.max(meta.last_page || 1, 1), [meta.last_page]);
+    const groupedItems = useMemo(() => {
+        const groups = new Map<string, { key: string; perusahaan: PerusahaanRef | null; items: SuratJalanItem[] }>();
+
+        items.forEach((item) => {
+            const key = createCompanyKey(item.perusahaan_id);
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    key,
+                    perusahaan: item.perusahaan ?? null,
+                    items: [],
+                });
+            }
+
+            groups.get(key)?.items.push(item);
+        });
+
+        return Array.from(groups.values());
+    }, [items]);
+
+    useEffect(() => {
+        if (groupedItems.length === 0) {
+            setSelectedCompanyKey(null);
+            return;
+        }
+
+        setSelectedCompanyKey((current) =>
+            current && groupedItems.some((group) => group.key === current)
+                ? current
+                : groupedItems[0].key
+        );
+    }, [groupedItems]);
+
+    const activeGroup = useMemo(
+        () => groupedItems.find((group) => group.key === selectedCompanyKey) ?? groupedItems[0] ?? null,
+        [groupedItems, selectedCompanyKey]
+    );
 
     const handleSort = (field: keyof SuratJalanItem) => {
         if (sortField === field) {
@@ -244,25 +306,26 @@ export default function Page() {
         setSortOrder("asc");
     };
 
-    const handleExportPdf = async () => {
+    const handleExportPdf = async (perusahaan?: PerusahaanRef | null, exportItems: SuratJalanItem[] = items) => {
         if (!detail) {
             return;
         }
 
-        const temaCode = detail.perusahaan_tema_invoice ?? detail.perusahaan_ref?.tema_invoice ?? "theme_01";
+        const temaCode = perusahaan?.tema_invoice ?? detail.perusahaan_tema_invoice ?? detail.perusahaan_ref?.tema_invoice ?? "theme_01";
         const theme = getInvoiceTheme(temaCode);
 
-        let logoImage = detail.perusahaan_logo_data_url ?? null;
-        if (!logoImage && detail.perusahaan_ref?.logo_url) {
+        let logoImage: string | null = null;
+        const logoUrl = perusahaan?.logo_url ?? detail.perusahaan_ref?.logo_url;
+        if (logoUrl) {
             try {
-                logoImage = await loadImageAsDataUrl(detail.perusahaan_ref.logo_url);
+                logoImage = await loadImageAsDataUrl(logoUrl);
             } catch {
                 logoImage = null;
             }
         }
 
-        if (!logoImage) {
-            logoImage = await loadImageAsDataUrl("/invoice-header.png");
+        if (!logoImage && !perusahaan) {
+            logoImage = detail.perusahaan_logo_data_url ?? null;
         }
 
         const doc = new jsPDF({
@@ -274,7 +337,9 @@ export default function Page() {
         doc.setFont("times", "normal");
 
         drawCornerOrnaments(doc, temaCode);
-        drawCompanyLogo(doc, logoImage);
+        if (logoImage) {
+            drawCompanyLogo(doc, logoImage);
+        }
 
         doc.setFont("times", "bold");
         doc.setFontSize(22);
@@ -315,7 +380,9 @@ export default function Page() {
             didDrawPage: (tableData) => {
                 if (tableData.pageNumber > 1) {
                     drawCornerOrnaments(doc, temaCode);
-                    drawCompanyLogo(doc, logoImage);
+                    if (logoImage) {
+                        drawCompanyLogo(doc, logoImage);
+                    }
                 }
             },
             columnStyles: {
@@ -326,7 +393,7 @@ export default function Page() {
                 4: { cellWidth: 45 },
             },
             head: [["No", "Nama Barang", "Satuan", "Jumlah\nBarang", "Keterangan"]],
-            body: items.map((item, index) => [
+            body: exportItems.map((item, index) => [
                 index + 1,
                 item.nama_barang,
                 item.satuan ?? "-",
@@ -349,11 +416,7 @@ export default function Page() {
         doc.text("(                             )", 60, finalY + 55, { align: "center" });
         doc.text("(                             )", 150, finalY + 55, { align: "center" });
 
-        const safeNumber = (detail.nomor_surat_jalan || `surat-jalan-${suratJalanId}`)
-            .replace(/[\\/:*?"<>|]/g, "-")
-            .replace(/\s+/g, "-");
-
-        doc.save(`${safeNumber}.pdf`);
+        doc.save(createPdfFileName("surat_jalan", perusahaan?.nama_perusahaan, detail.tanggal));
     };
 
     return (
@@ -363,7 +426,7 @@ export default function Page() {
                     <h1 className="text-xl font-bold">Detail Surat Jalan #{suratJalanId}</h1>
                     {detail ? (
                         <p className="text-sm text-gray-600 mt-1">
-                            {detail.nomor_surat_jalan} | {detail.sppg?.nama_sppg ?? "-"} | {detail.perusahaan_ref?.nama_perusahaan ?? "-"} | {formatTanggal(detail.tanggal)}
+                            {detail.nomor_surat_jalan} | {detail.sppg?.nama_sppg ?? "-"} | {formatTanggal(detail.tanggal)}
                         </p>
                     ) : null}
                 </div>
@@ -395,88 +458,109 @@ export default function Page() {
                     onChange={(e) => setSearchInput(e.target.value)}
                     className="border p-2 rounded-md w-1/4 min-w-60 bg-white shadow"
                 />
-
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={handleExportPdf}
-                        className="flex items-center gap-2 bg-green-600 shadow-lg shadow-black/10 text-white px-4 py-2 rounded-lg hover:-translate-y-1 transition cursor-pointer"
-                    >
-                        <FileDown size={16} />
-                        Export
-                    </button>
-                </div>
             </div>
 
-            <div className="bg-white/70 backdrop-blur-lg rounded-lg shadow overflow-auto">
-                <table className="w-full text-sm">
-                    <thead className="bg-white shadow-lg">
-                        <tr>
-                            <th className="p-3">
-                                <button onClick={() => handleSort("id")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "id")}`}>
-                                    No <ArrowUpDown size={14} />
-                                </button>
-                            </th>
-                            <th className="p-3">
-                                <button onClick={() => handleSort("nama_barang")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "nama_barang")}`}>
-                                    Nama Barang
-                                </button>
-                            </th>
-                            <th className="p-3">
-                                <button onClick={() => handleSort("qty")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "qty")}`}>
-                                    Qty
-                                </button>
-                            </th>
-                            <th className="p-3">
-                                <button onClick={() => handleSort("satuan")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "satuan")}`}>
-                                    Satuan
-                                </button>
-                            </th>
-                            <th className="p-3">
-                                <button onClick={() => handleSort("keterangan")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "keterangan")}`}>
-                                    Keterangan
-                                </button>
-                            </th>
-                            <th className="p-3">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="font-semibold">Perusahaan</h2>
+                        <span className="text-xs text-gray-500">{groupedItems.length} data</span>
+                    </div>
+                    <div className="space-y-2">
                         {loading ? (
-                            <tr>
-                                <td colSpan={6} className="p-6 text-center text-gray-500">
-                                    Memuat data...
-                                </td>
-                            </tr>
-                        ) : items.length === 0 ? (
-                            <tr>
-                                <td colSpan={6} className="p-6 text-center text-gray-500">
-                                    Belum ada item surat jalan.
-                                </td>
-                            </tr>
-                        ) : (
-                            items.map((item, index) => (
-                                <tr key={item.id} className="border-t border-primary/20 hover:bg-lime-100/80">
-                                    <td className="p-3 text-center">
-                                        {sortField === "id" ? item.id : ((meta.current_page || 1) - 1) * perPage + index + 1}
-                                    </td>
-                                    <td className="p-3">{item.nama_barang}</td>
-                                    <td className="p-3 text-center">{Number(item.qty)}</td>
-                                    <td className="p-3 text-center">{item.satuan ?? "-"}</td>
-                                    <td className="p-3">{item.keterangan || "-"}</td>
-                                    <td className="p-3">
-                                        <div className="flex justify-center gap-2">
-                                            <button
-                                                onClick={() => handleEdit(item)}
-                                                className="p-2 bg-blue-500/30 text-blue-700 rounded-md"
-                                            >
-                                                <Pencil size={14} />
-                                            </button>
-                                        </div>
-                                    </td>
+                            <div className="p-3 text-sm text-gray-500">Memuat perusahaan...</div>
+                        ) : groupedItems.length === 0 ? (
+                            <div className="p-3 text-sm text-gray-500">Belum ada perusahaan.</div>
+                        ) : groupedItems.map((group) => {
+                            const isActive = activeGroup?.key === group.key;
+                            const groupTheme = getInvoiceTheme(group.perusahaan?.tema_invoice ?? detail?.perusahaan_tema_invoice ?? detail?.perusahaan_ref?.tema_invoice ?? "theme_01");
+
+                            return (
+                                <button
+                                    key={group.key}
+                                    onClick={() => setSelectedCompanyKey(group.key)}
+                                    className={`w-full text-left p-3 rounded-md border transition ${isActive
+                                        ? "bg-lime-100 border-primary shadow-sm"
+                                        : "bg-white hover:bg-gray-100 border-gray-200"
+                                        }`}
+                                >
+                                    <span className="flex items-center gap-2 font-medium">
+                                        <span
+                                            className="h-3 w-3 rounded-full"
+                                            style={{ backgroundColor: `rgb(${groupTheme.primary.join(",")})` }}
+                                        />
+                                        {group.perusahaan?.nama_perusahaan ?? "Tanpa Perusahaan"}
+                                    </span>
+                                    <span className="block text-xs text-gray-500">{group.items.length} item</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="lg:col-span-2 bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 className="font-semibold">
+                                Detail Barang ({activeGroup?.perusahaan?.nama_perusahaan ?? "Tanpa Perusahaan"})
+                            </h2>
+                            <p className="text-xs text-gray-500">
+                                Export PDF mengikuti logo dan tema perusahaan aktif.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => activeGroup && void handleExportPdf(activeGroup.perusahaan, activeGroup.items)}
+                            disabled={!activeGroup}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-xs font-semibold text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                        >
+                            <FileDown size={16} />
+                            Export PDF
+                        </button>
+                    </div>
+
+                    <div className="overflow-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    <th className="p-2 text-center">No</th>
+                                    <th className="p-2 text-left">Barang</th>
+                                    <th className="p-2 text-center">Qty</th>
+                                    <th className="p-2 text-center">Satuan</th>
+                                    <th className="p-2 text-left">Keterangan</th>
+                                    <th className="p-2">Aksi</th>
                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan={6} className="p-4 text-center text-gray-500">Memuat data...</td>
+                                    </tr>
+                                ) : !activeGroup ? (
+                                    <tr>
+                                        <td colSpan={6} className="p-4 text-center text-gray-500">Belum ada item surat jalan.</td>
+                                    </tr>
+                                ) : (
+                                    activeGroup.items.map((item, index) => (
+                                        <tr key={item.id} className="border-t">
+                                            <td className="p-2 text-center">{index + 1}</td>
+                                            <td className="p-2">{item.nama_barang}</td>
+                                            <td className="p-2 text-center">{Number(item.qty)}</td>
+                                            <td className="p-2 text-center">{item.satuan ?? "-"}</td>
+                                            <td className="p-2">{item.keterangan || "-"}</td>
+                                            <td className="p-2">
+                                                <div className="flex justify-center gap-2">
+                                                    <button onClick={() => handleEdit(item)} className="p-2 bg-blue-500/30 text-blue-700 rounded-md">
+                                                        <Pencil size={14} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <div className="flex justify-end gap-2">

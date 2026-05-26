@@ -14,6 +14,14 @@ type PaymentStatus = "lunas" | "belum lunas";
 
 type InvoiceDetailItem = {
   id: number;
+  perusahaan_id?: number | null;
+  perusahaan?: {
+    id: number;
+    nama_perusahaan: string;
+    nama_pic?: string | null;
+    tema_invoice?: string | null;
+    logo_url?: string | null;
+  } | null;
   nama_barang: string;
   qty: number;
   satuan: string;
@@ -29,6 +37,7 @@ type InvoiceRecord = {
   sppg_id: number;
   accounting_id: number | null;
   accounting: string | null;
+  pic?: string | null;
   bank_rekening_id: number | null;
   nama_bank: string | null;
   no_rek: string | null;
@@ -57,13 +66,6 @@ type SppgOption = {
   no_hp: string | null;
 };
 
-type AccountingOption = {
-  id: number;
-  nama: string;
-  jabatan: string;
-  status: string;
-};
-
 type BankRekeningOption = {
   id: number;
   nama_bank: string;
@@ -72,22 +74,11 @@ type BankRekeningOption = {
   cabang: string;
 };
 
-type PerusahaanOption = {
-  id: number;
-  nama_perusahaan: string;
-  alamat: string;
-  nama_pic: string;
-  tema_invoice: string;
-  logo_url: string | null;
-};
-
 type FormType = {
   nomor_invoice: string;
   tanggal_kirim: string;
   sppg_id: string;
-  accounting_id: string;
   bank_rekening_id: string;
-  perusahaan_id: string;
   no_po: string;
   alamat: string;
   no_hp: string;
@@ -106,9 +97,7 @@ const emptyForm: FormType = {
   nomor_invoice: "",
   tanggal_kirim: "",
   sppg_id: "",
-  accounting_id: "",
   bank_rekening_id: "",
-  perusahaan_id: "",
   no_po: "",
   alamat: "",
   no_hp: "",
@@ -131,6 +120,16 @@ const formatTanggalIndonesiaPanjang = (value: string | null) => {
     month: "long",
     year: "numeric",
   }).format(date);
+};
+
+const createPdfFileName = (jenisDokumen: string, namaPerusahaan: string | null | undefined, tanggal: string | null | undefined) => {
+  const company = (namaPerusahaan || "tanpa-perusahaan")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const date = (tanggal || new Date().toISOString().slice(0, 10)).replaceAll("-", "_");
+
+  return `${jenisDokumen}_${company}_${date}.pdf`;
 };
 
 const loadImageAsDataUrl = async (imagePath: string) => {
@@ -167,9 +166,13 @@ const drawInvoiceCornerOrnaments = (doc: jsPDF, temaCode?: string | null) => {
 const drawInvoicePdfHeader = (
   doc: jsPDF,
   temaCode: string | null | undefined,
-  logoImageDataUrl: string,
+  logoImageDataUrl: string | null,
 ) => {
   drawInvoiceCornerOrnaments(doc, temaCode);
+  if (!logoImageDataUrl) {
+    return;
+  }
+
   const maxWidth = 50;
   const maxHeight = 24;
   let renderWidth = maxWidth;
@@ -189,7 +192,8 @@ const drawInvoicePdfHeader = (
 
   const x = 12;
   const y = 8 + (maxHeight - renderHeight) / 2;
-  doc.addImage(logoImageDataUrl, "PNG", x, y, renderWidth, renderHeight);
+  const imageFormat = logoImageDataUrl.match(/data:image\/([\w+]+);/)?.[1]?.toUpperCase() || "PNG";
+  doc.addImage(logoImageDataUrl, imageFormat, x, y, renderWidth, renderHeight);
 };
 
 const logUnexpectedError = (error: unknown) => {
@@ -217,9 +221,7 @@ export default function Page() {
 
   const [form, setForm] = useState<FormType>(emptyForm);
   const [sppgOptions, setSppgOptions] = useState<SppgOption[]>([]);
-  const [accountingOptions, setAccountingOptions] = useState<AccountingOption[]>([]);
   const [bankRekeningOptions, setBankRekeningOptions] = useState<BankRekeningOption[]>([]);
-  const [perusahaanOptions, setPerusahaanOptions] = useState<PerusahaanOption[]>([]);
   const [masterOptionsLoading, setMasterOptionsLoading] = useState(false);
   const [optionLoading, setOptionLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormType, string>>>({});
@@ -229,6 +231,7 @@ export default function Page() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [detailTarget, setDetailTarget] = useState<InvoiceRecord | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [selectedDetailCompanyKey, setSelectedDetailCompanyKey] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<"id" | "nomor_invoice" | "no_po" | "sppg" | "alamat" | "no_hp" | "tanggal_kirim" | "tanggal_invoice" | "total_tagihan" | "status_pembayaran">("tanggal_invoice");
@@ -290,26 +293,20 @@ export default function Page() {
 
   const fetchMasterOptions = useCallback(async () => {
     if (masterOptionsLoading) return;
-    if (accountingOptions.length > 0 && bankRekeningOptions.length > 0 && perusahaanOptions.length > 0) return;
+    if (bankRekeningOptions.length > 0) return;
 
     try {
       setMasterOptionsLoading(true);
-      const [accountingResponse, bankResponse, perusahaanResponse] = await Promise.all([
-        api.get("/invoice-penjualan/opsi-accounting"),
-        api.get("/invoice-penjualan/opsi-bank-rekening"),
-        api.get("/invoice-penjualan/opsi-perusahaan"),
-      ]);
+      const bankResponse = await api.get("/invoice-penjualan/opsi-bank-rekening");
 
-      setAccountingOptions(accountingResponse.data.data ?? []);
       setBankRekeningOptions(bankResponse.data.data ?? []);
-      setPerusahaanOptions(perusahaanResponse.data.data ?? []);
     } catch (error) {
       logUnexpectedError(error);
       setErrorMessage("Pilihan form invoice gagal dimuat.");
     } finally {
       setMasterOptionsLoading(false);
     }
-  }, [accountingOptions.length, bankRekeningOptions.length, masterOptionsLoading, perusahaanOptions.length]);
+  }, [bankRekeningOptions.length, masterOptionsLoading]);
 
   const sortedData = useMemo(() => {
     const rows = [...data];
@@ -353,6 +350,48 @@ export default function Page() {
 
   const detailItems = detailTarget?.detail_items ?? [];
   const detailGrandTotal = detailItems.reduce((sum, item) => sum + Number(item.harga_total || 0), 0);
+  const groupedDetailItems = useMemo(() => {
+    const groups = new Map<string, { key: string; perusahaan: InvoiceDetailItem["perusahaan"]; namaPerusahaan: string; items: InvoiceDetailItem[] }>();
+
+    detailItems.forEach((item) => {
+      const key = item.perusahaan_id ? String(item.perusahaan_id) : "tanpa-perusahaan";
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          perusahaan: item.perusahaan ?? null,
+          namaPerusahaan: item.perusahaan?.nama_perusahaan ?? "Tanpa Perusahaan",
+          items: [],
+        });
+      }
+
+      groups.get(key)?.items.push(item);
+    });
+
+    return Array.from(groups.values());
+  }, [detailItems]);
+
+  useEffect(() => {
+    if (groupedDetailItems.length === 0) {
+      setSelectedDetailCompanyKey(null);
+      return;
+    }
+
+    setSelectedDetailCompanyKey((current) =>
+      current && groupedDetailItems.some((group) => group.key === current)
+        ? current
+        : groupedDetailItems[0].key
+    );
+  }, [groupedDetailItems]);
+
+  const activeDetailGroup = useMemo(
+    () => groupedDetailItems.find((group) => group.key === selectedDetailCompanyKey) ?? groupedDetailItems[0] ?? null,
+    [groupedDetailItems, selectedDetailCompanyKey]
+  );
+
+  const activeDetailTotal = useMemo(
+    () => activeDetailGroup?.items.reduce((sum, item) => sum + Number(item.harga_total || 0), 0) ?? 0,
+    [activeDetailGroup]
+  );
 
   const applySelectedSppg = (selectedId: string, options: SppgOption[]) => {
     const selectedOption = options.find((option) => String(option.sppg_id) === selectedId);
@@ -425,9 +464,7 @@ export default function Page() {
     if (!form.nomor_invoice.trim()) nextErrors.nomor_invoice = "Nomor invoice wajib diisi.";
     if (!form.tanggal_kirim) nextErrors.tanggal_kirim = "Tanggal kirim wajib diisi.";
     if (!form.sppg_id) nextErrors.sppg_id = "SPPG wajib dipilih.";
-    if (!form.accounting_id) nextErrors.accounting_id = "Accounting wajib dipilih.";
     if (!form.bank_rekening_id) nextErrors.bank_rekening_id = "Bank dan rekening wajib dipilih.";
-    if (!form.perusahaan_id) nextErrors.perusahaan_id = "Perusahaan wajib dipilih.";
     if (!form.tanggal_invoice) nextErrors.tanggal_invoice = "Tanggal invoice wajib diisi.";
 
     setFieldErrors(nextErrors);
@@ -444,9 +481,7 @@ export default function Page() {
         nomor_invoice: form.nomor_invoice,
         tanggal_kirim: form.tanggal_kirim,
         sppg_id: Number(form.sppg_id),
-        accounting_id: Number(form.accounting_id),
         bank_rekening_id: Number(form.bank_rekening_id),
-        perusahaan_id: Number(form.perusahaan_id),
         tanggal_invoice: form.tanggal_invoice,
         status_pembayaran: form.status_pembayaran,
       };
@@ -470,9 +505,7 @@ export default function Page() {
           nomor_invoice: responseErrors.nomor_invoice?.[0],
           tanggal_kirim: responseErrors.tanggal_kirim?.[0],
           sppg_id: responseErrors.sppg_id?.[0],
-          accounting_id: responseErrors.accounting_id?.[0],
           bank_rekening_id: responseErrors.bank_rekening_id?.[0],
-          perusahaan_id: responseErrors.perusahaan_id?.[0],
           tanggal_invoice: responseErrors.tanggal_invoice?.[0],
           status_pembayaran: responseErrors.status_pembayaran?.[0],
         });
@@ -491,9 +524,7 @@ export default function Page() {
       nomor_invoice: item.nomor_invoice,
       tanggal_kirim: item.tanggal_kirim ?? "",
       sppg_id: item.sppg_id ? String(item.sppg_id) : "",
-      accounting_id: item.accounting_id ? String(item.accounting_id) : "",
       bank_rekening_id: item.bank_rekening_id ? String(item.bank_rekening_id) : "",
-      perusahaan_id: item.perusahaan_id ? String(item.perusahaan_id) : "",
       no_po: item.no_po ?? "",
       alamat: item.alamat ?? "",
       no_hp: item.no_hp ?? "",
@@ -545,7 +576,10 @@ export default function Page() {
     setSortOrder("asc");
   };
 
-  const handleExportDetailPdf = async () => {
+  const handleExportDetailPdf = async (
+    perusahaan?: InvoiceDetailItem["perusahaan"],
+    exportItems: InvoiceDetailItem[] = detailItems,
+  ) => {
     if (!detailTarget) return;
 
     try {
@@ -555,23 +589,25 @@ export default function Page() {
         format: "a4",
       });
 
-      const theme = getInvoiceTheme(detailTarget.perusahaan_tema_invoice);
-      let logoImage = detailTarget.perusahaan_logo_data_url ?? null;
+      const themeCode = perusahaan?.tema_invoice ?? detailTarget.perusahaan_tema_invoice;
+      const theme = getInvoiceTheme(themeCode);
+      let logoImage: string | null = null;
+      const logoUrl = perusahaan?.logo_url ?? detailTarget.perusahaan_logo_url;
 
-      if (!logoImage && detailTarget.perusahaan_logo_url) {
+      if (logoUrl) {
         try {
-          logoImage = await loadImageAsDataUrl(detailTarget.perusahaan_logo_url);
+          logoImage = await loadImageAsDataUrl(logoUrl);
         } catch {
           logoImage = null;
         }
       }
 
-      if (!logoImage) {
-        logoImage = await loadImageAsDataUrl("/invoice-header.png");
+      if (!logoImage && !perusahaan) {
+        logoImage = detailTarget.perusahaan_logo_data_url ?? null;
       }
 
       const finalLogoImage = logoImage;
-      drawInvoicePdfHeader(doc, detailTarget.perusahaan_tema_invoice, finalLogoImage);
+      drawInvoicePdfHeader(doc, themeCode, finalLogoImage);
 
       doc.setFont("times", "bold");
       doc.setFontSize(21);
@@ -598,7 +634,7 @@ export default function Page() {
       ];
       const rightLines = [
         `Tanggal Kirim: ${detailTarget.tanggal_kirim ?? "-"}`,
-        `Cheques Payable To: ${detailTarget.perusahaan ?? "-"}`,
+        `Cheques Payable To: ${perusahaan?.nama_perusahaan ?? detailTarget.perusahaan ?? "-"}`,
         `Nama Bank: ${detailTarget.nama_bank ?? "-"}`,
         `No Rekening: ${detailTarget.no_rek ?? "-"}`,
         `Atas Nama: ${detailTarget.atas_nama_bank ?? "-"}`,
@@ -644,7 +680,7 @@ export default function Page() {
         },
         didDrawPage: (data) => {
           if (data.pageNumber > 1) {
-            drawInvoicePdfHeader(doc, detailTarget.perusahaan_tema_invoice, finalLogoImage);
+            drawInvoicePdfHeader(doc, themeCode, finalLogoImage);
           }
         },
         columnStyles: {
@@ -656,7 +692,7 @@ export default function Page() {
           5: { halign: "center", cellWidth: 34 },
         },
         head: [["No", "Nama Barang", "Qty", "Satuan", "Harga Satuan", "Harga Total"]],
-        body: detailItems.map((item, index) => [
+        body: exportItems.map((item, index) => [
           index + 1,
           item.nama_barang,
           item.qty,
@@ -664,7 +700,7 @@ export default function Page() {
           formatRupiah(item.harga_satuan),
           formatRupiah(item.harga_total),
         ]),
-        foot: [["", "", "", "", "Total", formatRupiah(detailGrandTotal)]],
+        foot: [["", "", "", "", "Total", formatRupiah(exportItems.reduce((sum, item) => sum + Number(item.harga_total || 0), 0))]],
         footStyles: {
           fillColor: [255, 255, 255],
           textColor: [20, 20, 20],
@@ -680,10 +716,10 @@ export default function Page() {
       doc.setFontSize(11);
       doc.setTextColor(...theme.textStrong);
       doc.text(`Jombang, ${formatTanggalIndonesiaPanjang(detailTarget.tanggal_invoice)}`, 150, footerY, { align: "center" });
-      doc.text("Accounting Koperasi", 150, footerY + 8, { align: "center" });
-      doc.text(`(${detailTarget.accounting ?? ""})`, 150, footerY + 34, { align: "center" });
+      doc.text("PIC Perusahaan", 150, footerY + 8, { align: "center" });
+      doc.text(`(${perusahaan?.nama_pic ?? detailTarget.pic ?? detailTarget.accounting ?? ""})`, 150, footerY + 34, { align: "center" });
 
-      doc.save(`${detailTarget.nomor_invoice}.pdf`);
+      doc.save(createPdfFileName("invoice_penjualan", perusahaan?.nama_perusahaan, detailTarget.tanggal_invoice ?? detailTarget.tanggal_kirim));
     } catch (error) {
       logUnexpectedError(error);
       setErrorMessage("Data export invoice gagal dimuat.");
@@ -882,7 +918,7 @@ export default function Page() {
               <h2 className="text-lg font-semibold">{editId ? "Edit Data" : "Tambah Data"}</h2>
               {masterOptionsLoading ? (
                 <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                  Memuat pilihan accounting, bank, dan perusahaan...
+                  Memuat pilihan bank dan perusahaan...
                 </div>
               ) : null}
 
@@ -944,24 +980,6 @@ export default function Page() {
 
               <div className="space-y-1">
                 <select
-                  value={form.accounting_id}
-                  onChange={(e) => setForm((prev) => ({ ...prev, accounting_id: e.target.value }))}
-                  className={`w-full border p-2 rounded-md ${fieldErrors.accounting_id ? "border-red-400" : ""}`}
-                >
-                  <option value="">Pilih Accounting</option>
-                  {accountingOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.nama}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.accounting_id ? (
-                  <p className="text-sm text-red-600">{fieldErrors.accounting_id}</p>
-                ) : null}
-              </div>
-
-              <div className="space-y-1">
-                <select
                   value={form.bank_rekening_id}
                   onChange={(e) => setForm((prev) => ({ ...prev, bank_rekening_id: e.target.value }))}
                   className={`w-full border p-2 rounded-md ${fieldErrors.bank_rekening_id ? "border-red-400" : ""}`}
@@ -975,24 +993,6 @@ export default function Page() {
                 </select>
                 {fieldErrors.bank_rekening_id ? (
                   <p className="text-sm text-red-600">{fieldErrors.bank_rekening_id}</p>
-                ) : null}
-              </div>
-
-              <div className="space-y-1">
-                <select
-                  value={form.perusahaan_id}
-                  onChange={(e) => setForm((prev) => ({ ...prev, perusahaan_id: e.target.value }))}
-                  className={`w-full border p-2 rounded-md ${fieldErrors.perusahaan_id ? "border-red-400" : ""}`}
-                >
-                  <option value="">Pilih Perusahaan</option>
-                  {perusahaanOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.nama_perusahaan}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.perusahaan_id ? (
-                  <p className="text-sm text-red-600">{fieldErrors.perusahaan_id}</p>
                 ) : null}
               </div>
 
@@ -1080,7 +1080,7 @@ export default function Page() {
       <AnimatePresence>
         {detailTarget ? (
           <Modal onClose={() => setDetailTarget(null)}>
-            <motion.div className="bg-white rounded-lg p-6 w-full max-w-5xl space-y-4">
+            <motion.div className="bg-white rounded-lg p-6 w-full max-w-6xl space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-semibold">Detail Invoice</h2>
@@ -1088,116 +1088,147 @@ export default function Page() {
                     {detailTarget.nomor_invoice} | {detailTarget.sppg ?? "-"}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => void handleExportDetailPdf()}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md"
-                  >
-                    <FileDown size={16} />
-                    Eksport
-                  </button>
-                  <button
-                    onClick={() => setDetailTarget(null)}
-                    className="px-4 py-2 bg-gray-200 rounded-md"
-                  >
-                    Tutup
-                  </button>
-                </div>
+                <button
+                  onClick={() => setDetailTarget(null)}
+                  className="px-4 py-2 bg-gray-200 rounded-md"
+                >
+                  Tutup
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-500">No. PO</p>
-                  <p>{detailTarget.no_po ?? "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Alamat</p>
-                  <p>{detailTarget.alamat ?? "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">No HP</p>
-                  <p>{detailTarget.no_hp ?? "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Tanggal Kirim</p>
-                  <p>{detailTarget.tanggal_kirim ?? "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Tanggal Invoice</p>
-                  <p>{detailTarget.tanggal_invoice ?? "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Status</p>
-                  <p>{formatStatusLabel(detailTarget.status_pembayaran)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Accounting</p>
-                  <p>{detailTarget.accounting ?? "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Bank</p>
-                  <p>{detailTarget.nama_bank ?? "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">No Rekening</p>
-                  <p>{detailTarget.no_rek ?? "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Atas Nama Rekening</p>
-                  <p>{detailTarget.atas_nama_bank ?? "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Perusahaan</p>
-                  <p>{detailTarget.perusahaan ?? "-"}</p>
-                </div>
-              </div>
-
-              <div className="overflow-auto border rounded-lg">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="p-3 border text-center">No</th>
-                      <th className="p-3 border text-left">Nama Barang</th>
-                      <th className="p-3 border text-center">Qty</th>
-                      <th className="p-3 border text-center">Satuan</th>
-                      <th className="p-3 border text-center">Harga Satuan</th>
-                      <th className="p-3 border text-center">Harga Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="rounded-lg border bg-white p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold">Perusahaan</h3>
+                    <span className="text-xs text-gray-500">{groupedDetailItems.length} data</span>
+                  </div>
+                  <div className="space-y-2 max-h-[520px] overflow-auto">
                     {detailLoading ? (
-                      <tr>
-                        <td colSpan={6} className="p-4 text-center text-gray-500">
-                          Memuat detail invoice...
-                        </td>
-                      </tr>
-                    ) : detailItems.length > 0 ? (
-                      detailItems.map((item, index) => (
-                        <tr key={item.id} className="border-t">
-                          <td className="p-3 border text-center">{index + 1}</td>
-                          <td className="p-3 border">{item.nama_barang}</td>
-                          <td className="p-3 border text-center">{item.qty}</td>
-                          <td className="p-3 border text-center">{item.satuan}</td>
-                          <td className="p-3 border text-center">{formatRupiah(item.harga_satuan)}</td>
-                          <td className="p-3 border text-center">{formatRupiah(item.harga_total)}</td>
+                      <div className="p-3 text-sm text-gray-500">Memuat perusahaan...</div>
+                    ) : groupedDetailItems.length === 0 ? (
+                      <div className="p-3 text-sm text-gray-500">Belum ada perusahaan.</div>
+                    ) : groupedDetailItems.map((group) => {
+                      const isActive = activeDetailGroup?.key === group.key;
+                      const groupTheme = getInvoiceTheme(group.perusahaan?.tema_invoice ?? detailTarget.perusahaan_tema_invoice ?? "theme_01");
+
+                      return (
+                        <button
+                          key={group.key}
+                          onClick={() => setSelectedDetailCompanyKey(group.key)}
+                          className={`w-full rounded-md border p-3 text-left transition ${isActive
+                            ? "border-primary bg-lime-100 shadow-sm"
+                            : "border-gray-200 bg-white hover:bg-gray-100"
+                            }`}
+                        >
+                          <span className="flex items-center gap-2 font-medium">
+                            <span
+                              className="h-3 w-3 rounded-full"
+                              style={{ backgroundColor: `rgb(${groupTheme.primary.join(",")})` }}
+                            />
+                            {group.namaPerusahaan}
+                          </span>
+                          <span className="block text-xs text-gray-500">{group.items.length} item</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2 rounded-lg border bg-white p-4">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold">
+                        Detail Barang ({activeDetailGroup?.namaPerusahaan ?? "Tanpa Perusahaan"})
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        Export PDF mengikuti logo dan tema perusahaan aktif.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => activeDetailGroup && void handleExportDetailPdf(activeDetailGroup.perusahaan, activeDetailGroup.items)}
+                      disabled={!activeDetailGroup}
+                      className="flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                    >
+                      <FileDown size={16} />
+                      Export PDF
+                    </button>
+                  </div>
+
+                  <div className="mb-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
+                    <div>
+                      <p className="text-gray-500">No. PO</p>
+                      <p>{detailTarget.no_po ?? "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Tanggal Invoice</p>
+                      <p>{detailTarget.tanggal_invoice ?? "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Status</p>
+                      <p>{formatStatusLabel(detailTarget.status_pembayaran)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">PIC</p>
+                      <p>{activeDetailGroup?.perusahaan?.nama_pic ?? detailTarget.pic ?? detailTarget.accounting ?? "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Bank</p>
+                      <p>{detailTarget.nama_bank ?? "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">No Rekening</p>
+                      <p>{detailTarget.no_rek ?? "-"}</p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-auto rounded-lg border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="p-3 border text-center">No</th>
+                          <th className="p-3 border text-left">Nama Barang</th>
+                          <th className="p-3 border text-center">Qty</th>
+                          <th className="p-3 border text-center">Satuan</th>
+                          <th className="p-3 border text-center">Harga Satuan</th>
+                          <th className="p-3 border text-center">Harga Total</th>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6} className="p-4 text-center text-gray-500">
-                          Belum ada detail barang.
-                        </td>
-                      </tr>
-                    )}
-                    {detailItems.length > 0 ? (
-                      <tr className="font-semibold bg-gray-50">
-                        <td colSpan={4} className="border p-3" />
-                        <td className="border p-3 text-center">Total</td>
-                        <td className="border p-3 text-center">{formatRupiah(detailGrandTotal)}</td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {detailLoading ? (
+                          <tr>
+                            <td colSpan={6} className="p-4 text-center text-gray-500">
+                              Memuat detail invoice...
+                            </td>
+                          </tr>
+                        ) : !activeDetailGroup ? (
+                          <tr>
+                            <td colSpan={6} className="p-4 text-center text-gray-500">
+                              Belum ada detail barang.
+                            </td>
+                          </tr>
+                        ) : (
+                          activeDetailGroup.items.map((item, index) => (
+                            <tr key={item.id} className="border-t">
+                              <td className="p-3 border text-center">{index + 1}</td>
+                              <td className="p-3 border">{item.nama_barang}</td>
+                              <td className="p-3 border text-center">{item.qty}</td>
+                              <td className="p-3 border text-center">{item.satuan}</td>
+                              <td className="p-3 border text-center">{formatRupiah(item.harga_satuan)}</td>
+                              <td className="p-3 border text-center">{formatRupiah(item.harga_total)}</td>
+                            </tr>
+                          ))
+                        )}
+                        {activeDetailGroup ? (
+                          <tr className="font-semibold bg-gray-50">
+                            <td colSpan={4} className="border p-3" />
+                            <td className="border p-3 text-center">Total</td>
+                            <td className="border p-3 text-center">{formatRupiah(activeDetailTotal)}</td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </motion.div>
           </Modal>

@@ -38,6 +38,14 @@ type PenjualanItem = {
     produk_id: number | null;
     gudang_id: number | null;
     gudang?: GudangOption | null;
+    perusahaan_id: number | null;
+    perusahaan?: {
+        id: number;
+        nama_perusahaan: string;
+        nama_pic?: string;
+        tema_invoice?: string;
+        logo_url?: string | null;
+    } | null;
     nama_barang: string;
     qty: number | string;
     satuan: string;
@@ -59,6 +67,7 @@ type OpsiBarang = {
 type FormType = {
     order_penawaran_item_id: number | null;
     gudang_id: number | null;
+    perusahaan_id: number | null;
     qty: string;
 };
 
@@ -67,7 +76,13 @@ type FieldErrors = Partial<Record<keyof FormType, string>>;
 const initialForm: FormType = {
     order_penawaran_item_id: null,
     gudang_id: null,
+    perusahaan_id: null,
     qty: "",
+};
+
+type PerusahaanOption = {
+    id: number;
+    nama_perusahaan: string;
 };
 
 const initialMeta: Meta = {
@@ -101,6 +116,7 @@ export default function Page() {
     const [items, setItems] = useState<PenjualanItem[]>([]);
     const [opsiBarang, setOpsiBarang] = useState<OpsiBarang[]>([]);
     const [gudangOptions, setGudangOptions] = useState<GudangOption[]>([]);
+    const [perusahaanOptions, setPerusahaanOptions] = useState<PerusahaanOption[]>([]);
     const [loadingOptions, setLoadingOptions] = useState(false);
     const [meta, setMeta] = useState<Meta>(initialMeta);
     const [loading, setLoading] = useState(true);
@@ -151,23 +167,25 @@ export default function Page() {
 
     const fetchFormOptions = useCallback(async () => {
         if (loadingOptions) return;
-        if (opsiBarang.length > 0 && gudangOptions.length > 0) return;
+        if (opsiBarang.length > 0 && gudangOptions.length > 0 && perusahaanOptions.length > 0) return;
 
         try {
             setLoadingOptions(true);
-            const [opsiResponse, gudangResponse] = await Promise.all([
+            const [opsiResponse, gudangResponse, perusahaanResponse] = await Promise.all([
                 api.get(`/penjualan/${penjualanId}/opsi-barang`),
                 api.get("/gudang", { params: { per_page: 100 } }),
+                api.get("/perusahaan", { params: { per_page: 100 } }),
             ]);
 
             setOpsiBarang(opsiResponse.data.data ?? []);
             setGudangOptions(gudangResponse.data.data ?? []);
+            setPerusahaanOptions(perusahaanResponse.data.data ?? []);
         } catch (error) {
             setErrorMessage(extractErrorMessage(error));
         } finally {
             setLoadingOptions(false);
         }
-    }, [gudangOptions.length, loadingOptions, opsiBarang.length, penjualanId]);
+    }, [gudangOptions.length, loadingOptions, opsiBarang.length, penjualanId, perusahaanOptions.length]);
 
     useEffect(() => {
         const timeout = window.setTimeout(() => {
@@ -218,6 +236,7 @@ export default function Page() {
         setForm({
             order_penawaran_item_id: item.order_penawaran_item_id,
             gudang_id: item.gudang_id,
+            perusahaan_id: item.perusahaan_id,
             qty: String(Number(item.qty)),
         });
         setFieldErrors({});
@@ -231,6 +250,7 @@ export default function Page() {
 
         if (!form.order_penawaran_item_id) nextFieldErrors.order_penawaran_item_id = "Barang wajib dipilih.";
         if (!form.gudang_id) nextFieldErrors.gudang_id = "Gudang wajib dipilih.";
+        if (!form.perusahaan_id) nextFieldErrors.perusahaan_id = "Perusahaan wajib dipilih.";
         if (!form.qty.trim()) {
             nextFieldErrors.qty = "Qty wajib diisi.";
         } else if (Number(form.qty) <= 0) {
@@ -252,6 +272,7 @@ export default function Page() {
             const payload = {
                 order_penawaran_item_id: form.order_penawaran_item_id,
                 gudang_id: form.gudang_id,
+                perusahaan_id: form.perusahaan_id,
                 qty: Number(form.qty),
             };
 
@@ -398,6 +419,7 @@ export default function Page() {
                                 </button>
                             </th>
                             <th className="p-3 text-left">Gudang</th>
+                            <th className="p-3 text-left">Perusahaan</th>
                             <th className="p-3">
                                 <button onClick={() => handleSort("qty")} className={`flex items-center gap-2 transition-colors ${getSortClass(sortField, "qty")}`}>
                                     Qty <ArrowUpDown size={14} />
@@ -419,7 +441,7 @@ export default function Page() {
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan={10} className="p-6 text-center text-gray-500">
+                                <td colSpan={11} className="p-6 text-center text-gray-500">
                                     Memuat data...
                                 </td>
                             </tr>
@@ -429,6 +451,7 @@ export default function Page() {
                                     <td className="p-3 text-center">{sortField === "id" ? item.id : ((meta.current_page || 1) - 1) * perPage + index + 1}</td>
                                     <td className="p-3">{item.nama_barang}</td>
                                     <td className="p-3">{item.gudang?.nama_gudang ?? "-"}</td>
+                                    <td className="p-3">{item.perusahaan?.nama_perusahaan ?? "-"}</td>
                                     <td className="p-3">{Number(item.qty)}</td>
                                     <td className="p-3">{item.satuan}</td>
                                     <td className="p-3">{Number(item.stok_tersedia)}</td>
@@ -470,7 +493,7 @@ export default function Page() {
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={10} className="p-6 text-center text-gray-500">
+                                <td colSpan={11} className="p-6 text-center text-gray-500">
                                     Belum ada item penjualan.
                                 </td>
                             </tr>
@@ -576,6 +599,26 @@ export default function Page() {
                                 ))}
                             </select>
                             {fieldErrors.gudang_id ? <p className="text-xs text-red-600 -mt-2">{fieldErrors.gudang_id}</p> : null}
+
+                            <select
+                                value={form.perusahaan_id ?? ""}
+                                onChange={(e) => {
+                                    setForm({
+                                        ...form,
+                                        perusahaan_id: e.target.value ? Number(e.target.value) : null,
+                                    });
+                                    clearFieldError("perusahaan_id");
+                                }}
+                                className={`w-full border p-2 rounded-md ${fieldErrors.perusahaan_id ? "border-red-500 focus:outline-red-500" : ""}`}
+                            >
+                                <option value="">Pilih Perusahaan</option>
+                                {perusahaanOptions.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                        {item.nama_perusahaan}
+                                    </option>
+                                ))}
+                            </select>
+                            {fieldErrors.perusahaan_id ? <p className="text-xs text-red-600 -mt-2">{fieldErrors.perusahaan_id}</p> : null}
 
                             <input
                                 type="number"
