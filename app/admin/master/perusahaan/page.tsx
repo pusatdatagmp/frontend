@@ -60,7 +60,7 @@ type FormType = {
     nama_pic: string;
     tema_invoice: string;
 };
-type FieldErrors = Partial<Record<keyof FormType, string>>;
+type FieldErrors = Partial<Record<keyof FormType | "logo", string>>;
 
 const initialMeta: Meta = {
     current_page: 1,
@@ -173,14 +173,10 @@ export default function Page() {
 
             if (editId) {
                 formData.append("_method", "PUT");
-                await api.post(`/perusahaan/${editId}`, formData, {
-                    headers: { "Content-Type": "multipart/form-data" },
-                });
+                await api.post(`/perusahaan/${editId}`, formData);
                 setSuccessMessage("Perusahaan berhasil diperbarui.");
             } else {
-                await api.post("/perusahaan", formData, {
-                    headers: { "Content-Type": "multipart/form-data" },
-                });
+                await api.post("/perusahaan", formData);
                 setSuccessMessage("Perusahaan berhasil ditambahkan.");
             }
 
@@ -225,6 +221,73 @@ export default function Page() {
         setLogoPreviewUrl(resolvePerusahaanLogoUrl(item));
         setEditId(item.id);
         setOpenForm(true);
+    };
+
+    const handleDownloadLogoPdf = async (item: Product) => {
+        const logoUrl = resolvePerusahaanLogoUrl(item);
+
+        if (!logoUrl) {
+            setErrorMessage("Logo tidak tersedia untuk diunduh.");
+            return;
+        }
+
+        try {
+            const response = await fetch(logoUrl);
+            if (!response.ok) throw new Error("Gagal mengunduh logo");
+
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const img = new Image();
+
+            img.onload = async () => {
+                // jsPDF is imported at top level
+                const jsPDF = (await import("jspdf")).jsPDF;
+                const doc = new jsPDF({
+                    orientation: "portrait",
+                    unit: "mm",
+                    format: "a4",
+                });
+
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                const margin = 20;
+
+                // Logo dimensions - maintain aspect ratio, max 100x100mm
+                const maxLogoWidth = 100;
+                const maxLogoHeight = 100;
+                let logoWidth = maxLogoWidth;
+                let logoHeight = (img.height / img.width) * logoWidth;
+
+                if (logoHeight > maxLogoHeight) {
+                    logoHeight = maxLogoHeight;
+                    logoWidth = (img.width / img.height) * logoHeight;
+                }
+
+                // Center logo
+                const logoX = (pageWidth - logoWidth) / 2;
+                const logoY = (pageHeight - logoHeight) / 2 - 20;
+
+                doc.addImage(blobUrl, "PNG", logoX, logoY, logoWidth, logoHeight);
+
+                // Add company name below logo
+                const textY = logoY + logoHeight + 15;
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                doc.text(item.nama_perusahaan, pageWidth / 2, textY, { align: "center" });
+
+                // Generate filename
+                const now = new Date().toISOString().split("T")[0];
+                const filename = `logo_${item.nama_perusahaan.replace(/\s+/g, "_")}_${now}.pdf`;
+
+                doc.save(filename);
+                URL.revokeObjectURL(blobUrl);
+            };
+
+            img.src = blobUrl;
+        } catch (error) {
+            setErrorMessage("Gagal mengunduh logo. Silakan coba lagi.");
+            console.error(error);
+        }
     };
 
     const handleDelete = async () => {
@@ -377,14 +440,15 @@ export default function Page() {
                                 <td className="p-3">{INVOICE_THEMES.find((theme) => theme.code === item.tema_invoice)?.label ?? "Maroon Klasik"}</td>
                                 <td className="p-3 text-center">
                                     {resolvePerusahaanLogoUrl(item) ? (
-                                        <a
-                                            href={resolvePerusahaanLogoUrl(item) ?? "#"}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
+                                        <button
+                                            onClick={() => handleDownloadLogoPdf(item)}
+                                            className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
                                         >
-                                            Lihat Logo
-                                        </a>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                            </svg>
+                                            Download PDF
+                                        </button>
                                     ) : (
                                         <span className="text-xs text-gray-400">-</span>
                                     )}
@@ -522,6 +586,7 @@ export default function Page() {
                                         const selectedFile = e.target.files?.[0] ?? null;
                                         setLogoFile(selectedFile);
                                         setErrorMessage("");
+                                        setFieldErrors((prev) => ({ ...prev, logo: undefined }));
                                         if (selectedFile) {
                                             setLogoPreviewUrl(URL.createObjectURL(selectedFile));
                                         } else if (editId) {
@@ -530,8 +595,9 @@ export default function Page() {
                                             setLogoPreviewUrl(null);
                                         }
                                     }}
-                                    className="w-full border p-2 rounded-md"
+                                    className={`w-full border p-2 rounded-md ${fieldErrors.logo ? "border-red-500 focus:outline-red-500" : ""}`}
                                 />
+                                {fieldErrors.logo ? <p className="text-xs text-red-600">{fieldErrors.logo}</p> : null}
                                 {logoPreviewUrl ? (
                                     <img
                                         src={logoPreviewUrl}
@@ -591,7 +657,7 @@ export default function Page() {
 /* MODAL tetap sama */
 function Modal({
     children,
-   
+    onClose,
 }: {
     children: React.ReactNode;
     onClose: () => void;
@@ -599,7 +665,7 @@ function Modal({
     return (
         <motion.div
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-           
+            onClick={onClose}
         >
             <div onClick={(e) => e.stopPropagation()}>
                 {children}

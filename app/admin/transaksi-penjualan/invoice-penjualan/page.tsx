@@ -21,6 +21,7 @@ type InvoiceDetailItem = {
     nama_pic?: string | null;
     tema_invoice?: string | null;
     logo_url?: string | null;
+    logo_data_url?: string | null;
   } | null;
   nama_barang: string;
   qty: number;
@@ -134,6 +135,9 @@ const createPdfFileName = (jenisDokumen: string, namaPerusahaan: string | null |
 
 const loadImageAsDataUrl = async (imagePath: string) => {
   const response = await fetch(imagePath);
+  if (!response.ok) {
+    throw new Error("Gambar header invoice gagal dimuat.");
+  }
   const blob = await response.blob();
 
   return await new Promise<string>((resolve, reject) => {
@@ -591,10 +595,12 @@ export default function Page() {
 
       const themeCode = perusahaan?.tema_invoice ?? detailTarget.perusahaan_tema_invoice;
       const theme = getInvoiceTheme(themeCode);
-      let logoImage: string | null = null;
-      const logoUrl = perusahaan?.logo_url ?? detailTarget.perusahaan_logo_url;
+      let logoImage: string | null = perusahaan?.logo_data_url ?? null;
+      const logoUrl = perusahaan
+        ? perusahaan.logo_url ?? null
+        : detailTarget.perusahaan_logo_url;
 
-      if (logoUrl) {
+      if (!logoImage && logoUrl) {
         try {
           logoImage = await loadImageAsDataUrl(logoUrl);
         } catch {

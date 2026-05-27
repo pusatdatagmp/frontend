@@ -142,7 +142,7 @@ export default function Page() {
             const [sppgRes, armadaRes, driverRes] = await Promise.all([
                 api.get<ApiListResponse<SppgOption>>("/sppg", { params: { per_page: 100 } }),
                 api.get<ApiListResponse<ArmadaOption>>("/armada", { params: { per_page: 100 } }),
-                api.get<ApiListResponse<DriverOption>>("/karyawan", { params: { search: "driver", per_page: 100 } }),
+                api.get<ApiListResponse<DriverOption>>("/surat-jalan/opsi-driver"),
             ]);
 
             setSppgData(sppgRes.data.data ?? []);

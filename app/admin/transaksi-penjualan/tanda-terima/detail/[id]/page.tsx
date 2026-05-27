@@ -29,6 +29,7 @@ type PerusahaanRef = {
     nama_pic?: string | null;
     tema_invoice?: string | null;
     logo_url?: string | null;
+    logo_data_url?: string | null;
 };
 
 type TandaTerimaDetail = {
@@ -64,6 +65,9 @@ const initialForm: FormType = {
 
 const loadImageAsDataUrl = async (imagePath: string) => {
     const response = await fetch(imagePath);
+    if (!response.ok) {
+        throw new Error("Gambar logo gagal dimuat.");
+    }
     const blob = await response.blob();
 
     return await new Promise<string>((resolve, reject) => {
@@ -323,9 +327,12 @@ export default function Page() {
             const temaCode = perusahaan?.tema_invoice ?? detail.perusahaan_tema_invoice ?? detail.perusahaanRef?.tema_invoice ?? "theme_01";
             const theme = getInvoiceTheme(temaCode);
 
-            let logoImage: string | null = null;
-            const logoUrl = perusahaan?.logo_url ?? detail.perusahaanRef?.logo_url;
-            if (logoUrl) {
+            let logoImage: string | null = perusahaan?.logo_data_url ?? null;
+            const logoUrl = perusahaan
+                ? perusahaan.logo_url ?? null
+                : detail.perusahaanRef?.logo_url ?? null;
+
+            if (!logoImage && logoUrl) {
                 try {
                     logoImage = await loadImageAsDataUrl(logoUrl);
                 } catch {
