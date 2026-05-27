@@ -121,6 +121,7 @@ export default function Page() {
     const [meta, setMeta] = useState<Meta>(initialMeta);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [syncingSourceItemId, setSyncingSourceItemId] = useState<number | null>(null);
     const [errorMessage, setErrorMessage] = useState("");
     const [successMessage, setSuccessMessage] = useState("");
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -249,8 +250,6 @@ export default function Page() {
         const nextFieldErrors: FieldErrors = {};
 
         if (!form.order_penawaran_item_id) nextFieldErrors.order_penawaran_item_id = "Barang wajib dipilih.";
-        if (!form.gudang_id) nextFieldErrors.gudang_id = "Gudang wajib dipilih.";
-        if (!form.perusahaan_id) nextFieldErrors.perusahaan_id = "Perusahaan wajib dipilih.";
         if (!form.qty.trim()) {
             nextFieldErrors.qty = "Qty wajib diisi.";
         } else if (Number(form.qty) <= 0) {
@@ -313,6 +312,26 @@ export default function Page() {
             setSuccessMessage("");
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const handleSyncSourceItem = async (item: PenjualanItem) => {
+        try {
+            setSyncingSourceItemId(item.id);
+            setErrorMessage("");
+            setSuccessMessage("");
+
+            await api.post(`/penjualan/${penjualanId}/items/import-order-item`, {
+                order_penawaran_item_id: item.order_penawaran_item_id,
+            });
+
+            setSuccessMessage(`Item ${item.nama_barang} berhasil ditambahkan ke penjualan.`);
+            await fetchData();
+        } catch (error) {
+            setErrorMessage(extractErrorMessage(error));
+            setSuccessMessage("");
+        } finally {
+            setSyncingSourceItemId(null);
         }
     };
 
@@ -469,8 +488,20 @@ export default function Page() {
                                     <td className="p-3"> {formatCurrency(Number(item.harga_satuan))}</td>
                                     <td className="p-3"> {formatCurrency(Number(item.total_harga))}</td>
                                     <td className="p-3 flex justify-center gap-2">
+                                        {item.penjualan_id === null ? (
+                                            <button
+                                                onClick={() => void handleSyncSourceItem(item)}
+                                                disabled={syncingSourceItemId === item.id}
+                                                className="p-2 bg-emerald-500/30 text-emerald-700 rounded disabled:opacity-50"
+                                                title="Tambah item ini ke data penjualan"
+                                            >
+                                                <Plus size={14} />
+                                            </button>
+                                        ) : null}
+
                                         <button
                                             onClick={() => handleEdit(item)}
+                                            disabled={item.penjualan_id === null}
                                             className="p-2 bg-blue-500/30 text-blue-700 rounded"
                                         >
                                             <Pencil size={14} />
@@ -591,14 +622,13 @@ export default function Page() {
                                 }}
                                 className={`w-full border p-2 rounded-md ${fieldErrors.gudang_id ? "border-red-500 focus:outline-red-500" : ""}`}
                             >
-                                <option value="">Pilih Gudang</option>
+                                <option value="">Pilih Gudang (opsional)</option>
                                 {gudangOptions.map((item) => (
                                     <option key={item.id} value={item.id}>
                                         {item.nama_gudang}
                                     </option>
                                 ))}
                             </select>
-                            {fieldErrors.gudang_id ? <p className="text-xs text-red-600 -mt-2">{fieldErrors.gudang_id}</p> : null}
 
                             <select
                                 value={form.perusahaan_id ?? ""}
@@ -611,14 +641,13 @@ export default function Page() {
                                 }}
                                 className={`w-full border p-2 rounded-md ${fieldErrors.perusahaan_id ? "border-red-500 focus:outline-red-500" : ""}`}
                             >
-                                <option value="">Pilih Perusahaan</option>
+                                <option value="">Pilih Perusahaan (opsional)</option>
                                 {perusahaanOptions.map((item) => (
                                     <option key={item.id} value={item.id}>
                                         {item.nama_perusahaan}
                                     </option>
                                 ))}
                             </select>
-                            {fieldErrors.perusahaan_id ? <p className="text-xs text-red-600 -mt-2">{fieldErrors.perusahaan_id}</p> : null}
 
                             <input
                                 type="number"
