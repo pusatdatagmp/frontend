@@ -103,7 +103,7 @@ const menus: MenuConfig[] = [
       { icon: <ScrollText size={16} />, label: "Invoice Penjualan", path: "/admin/transaksi-penjualan/invoice-penjualan", permission: "penjualan.invoice_penjualan.view" },
     ],
   },
-   {
+  {
     label: "Keuangan & Akuntansi",
     icon: <Wallet />,
     key: "keuangan",
@@ -156,6 +156,8 @@ export default function Sidebar({ open }: { open: boolean }) {
       [key]: !prev[key],
     }));
   };
+
+  console.log(user);
 
   return (
     <aside

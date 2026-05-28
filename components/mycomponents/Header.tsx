@@ -14,6 +14,15 @@ import {
 export default function Header({ onToggle }: { onToggle: () => void }) {
   const router = useRouter();
   const [nama, setNama] = useState("");
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
 
   useEffect(() => {
     const user = localStorage.getItem("user");
@@ -56,7 +65,9 @@ export default function Header({ onToggle }: { onToggle: () => void }) {
         <button onClick={onToggle}>
           <Menu className="w-6 h-6" />
         </button>
-        <h1 className="font-semibold text-lg">Admin</h1>
+        <h1 className="font-semibold text-lg">
+          {user?.role}
+        </h1>
       </div>
 
       {/* RIGHT */}

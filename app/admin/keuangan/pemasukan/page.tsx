@@ -235,6 +235,34 @@ export default function Page() {
 
     const totalPages = useMemo(() => Math.max(meta.last_page || 1, 1), [meta.last_page]);
 
+    const visiblePages = useMemo(() => {
+        const delta = 2;
+
+        const range: (number | string)[] = [];
+
+        const start = Math.max(2, currentPage - delta);
+        const end = Math.min(totalPages - 1, currentPage + delta);
+
+        range.push(1);
+
+        if (start > 2) {
+            range.push("...");
+        }
+
+        for (let i = start; i <= end; i++) {
+            range.push(i);
+        }
+
+        if (end < totalPages - 1) {
+            range.push("...");
+        }
+
+        if (totalPages > 1) {
+            range.push(totalPages);
+        }
+
+        return range;
+    }, [currentPage, totalPages]);
 
 
     return (
@@ -383,29 +411,43 @@ export default function Page() {
                 </table>
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => p - 1)}
-                    className="px-3 py-1 border rounded-md disabled:opacity-50"
+                    disabled={currentPage === 1 || loading}
+                    onClick={() => setCurrentPage((prev) => prev - 1)}
+                    className="rounded-lg border px-4 py-2 text-sm transition hover:bg-gray-100 disabled:opacity-50"
                 >
                     Prev
                 </button>
 
-                {Array.from({ length: totalPages }, (_, i) => (
-                    <button
-                        key={i}
-                        onClick={() => setCurrentPage(i + 1)}
-                        className={`px-3 py-1 border rounded-md ${currentPage === i + 1 ? "bg-primary text-white" : ""}`}
-                    >
-                        {i + 1}
-                    </button>
-                ))}
+                {visiblePages.map((page, index) =>
+                    page === "..." ? (
+                        <span
+                            key={`ellipsis-${index}`}
+                            className="px-2 text-gray-500"
+                        >
+                            ...
+                        </span>
+                    ) : (
+                        <button
+                            key={page}
+                            onClick={() => setCurrentPage(Number(page))}
+                            disabled={loading}
+                            className={`min-w-[40px] rounded-lg border px-3 py-2 text-sm transition
+                    ${currentPage === page
+                                    ? "bg-primary text-white border-primary"
+                                    : "hover:bg-gray-100"
+                                }`}
+                        >
+                            {page}
+                        </button>
+                    )
+                )}
 
                 <button
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage((p) => p + 1)}
-                    className="px-3 py-1 border rounded-md disabled:opacity-50"
+                    disabled={currentPage === totalPages || loading}
+                    onClick={() => setCurrentPage((prev) => prev + 1)}
+                    className="rounded-lg border px-4 py-2 text-sm transition hover:bg-gray-100 disabled:opacity-50"
                 >
                     Next
                 </button>
