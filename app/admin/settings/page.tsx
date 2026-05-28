@@ -165,16 +165,17 @@ const PERMISSION_MATRIX_SECTIONS: PermissionMatrixSection[] = [
         items: [
             { label: "Laporan Stok Barang", viewCode: "laporan.stok_barang.view" },
             { label: "Laba Rugi Transaksional", viewCode: "laporan.laba_rugi.view" },
-            { label: "Penjualan per SPPG", viewCode: "laporan.penjualan_sppg.view" },
-        ],
-    },
-    {
-        title: "Pengguna",
-        items: [
-            { label: "Manajemen Pengguna", viewCode: "users.view", createCode: "users.create", updateCode: "users.update", deleteCode: "users.delete" },
         ],
     },
 ];
+
+const MATRIX_PERMISSION_CODES = new Set(
+    PERMISSION_MATRIX_SECTIONS.flatMap((section) =>
+        section.items.flatMap((item) =>
+            [item.viewCode, item.createCode, item.updateCode, item.deleteCode].filter(Boolean)
+        )
+    ) as string[]
+);
 
 const isSuperAdminRole = (role: string): boolean =>
     role.toLowerCase().replace(/[\s_-]+/g, "") === "superadmin";
@@ -467,7 +468,7 @@ export default function Page() {
                 email: createUserForm.email.trim(),
                 password: createUserForm.password,
                 role: normalizeRoleForApi(createUserForm.role),
-                ...(!isSuperAdminRole(createUserForm.role) ? { permission_ids: createPermissionIds } : {}),
+                ...(!isSuperAdminRole(createUserForm.role) ? { permission_ids: sanitizePermissionIds(createPermissionIds) } : {}),
             });
 
             setCreateUserForm(emptyCreateUser);
@@ -513,7 +514,7 @@ export default function Page() {
             role: user.role,
             password: "",
             confirmPassword: "",
-            permissionIds: user.permissions.map((permission) => permission.id),
+            permissionIds: sanitizePermissionIds(user.permissions.map((permission) => permission.id)),
         });
         setIsEditPanelOpen(true);
         setErrorMessage("");
@@ -549,7 +550,7 @@ export default function Page() {
                 email: editingUser.email.trim(),
                 role: normalizeRoleForApi(editingUser.role),
                 password: editingUser.password || undefined,
-                ...(!isSuperAdminRole(editingUser.role) ? { permission_ids: editingUser.permissionIds } : {}),
+                ...(!isSuperAdminRole(editingUser.role) ? { permission_ids: sanitizePermissionIds(editingUser.permissionIds) } : {}),
             });
 
             await loadUserManagementData();
@@ -605,16 +606,20 @@ export default function Page() {
         return `${groupCount} grup / ${user.permissions.length} permission`;
     };
 
-    const allPermissionIds = permissionGroups.flatMap((group) =>
-        group.permissions.map((permission) => permission.id)
-    );
-
     const permissionIdByCode = permissionGroups
         .flatMap((group) => group.permissions)
         .reduce<Record<string, number>>((acc, permission) => {
             acc[permission.code] = permission.id;
             return acc;
         }, {});
+
+    const allPermissionIds = Array.from(MATRIX_PERMISSION_CODES)
+        .map((code) => permissionIdByCode[code])
+        .filter((id): id is number => typeof id === "number");
+
+    const visiblePermissionIdSet = new Set(allPermissionIds);
+    const sanitizePermissionIds = (ids: number[]): number[] =>
+        ids.filter((id) => visiblePermissionIdSet.has(id));
 
     const resolvePermissionId = (code?: string): number | null => {
         if (!code) {

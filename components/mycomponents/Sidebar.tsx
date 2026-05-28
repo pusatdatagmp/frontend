@@ -157,8 +157,6 @@ export default function Sidebar({ open }: { open: boolean }) {
     }));
   };
 
-  console.log(user);
-
   return (
     <aside
       className={`fixed top-0 left-0 h-screen text-gray-200 bg-primary backdrop-blur-lg transition-all duration-300 flex flex-col
