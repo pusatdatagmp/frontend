@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUpDown, Eye, Plus } from "lucide-react";
+import { ArrowUpDown, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import api from "@/lib/api";
@@ -33,7 +33,8 @@ export default function Page() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
-    const [filterDate, setFilterDate] = useState("");
+    const [searchInput, setSearchInput] = useState("");
+    const [search, setSearch] = useState("");
 
     const [openForm, setOpenForm] = useState(false);
     const [tanggalPesan, setTanggalPesan] = useState("");
@@ -51,7 +52,7 @@ export default function Page() {
                 "/daftar-pembelanjaan-supplier",
                 {
                     params: {
-                        tanggal_pesan: filterDate || undefined,
+                        search: search || undefined,
                         sort_field: sortField,
                         sort_order: sortOrder,
                         page: currentPage,
@@ -71,11 +72,19 @@ export default function Page() {
 
     useEffect(() => {
         void fetchData();
-    }, [currentPage, filterDate, sortField, sortOrder]);
+    }, [currentPage, search, sortField, sortOrder]);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [filterDate]);
+    }, [search]);
+
+    useEffect(() => {
+        const timeout = window.setTimeout(() => {
+            setSearch(searchInput.trim());
+        }, 300);
+
+        return () => window.clearTimeout(timeout);
+    }, [searchInput]);
 
     function handleSort(field: "id" | "tanggal_pesan") {
         if (sortField === field) {
@@ -130,10 +139,10 @@ export default function Page() {
 
             <div className="flex items-center justify-between gap-4">
                 <input
-                    type="date"
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    className="border p-2 rounded-md w-52 bg-white shadow"
+                    placeholder="Cari no / tanggal / supplier / barang..."
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    className="border p-2 rounded-md w-80 bg-white shadow"
                 />
             </div>
 

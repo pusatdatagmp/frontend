@@ -20,6 +20,7 @@ const initialRoles: RoleRow[] = [
   { id: 2, no: 2, role: "Admin" },
 ];
 const STORAGE_KEY = "master_role_rows_v1";
+const normalizeRoleKey = (value: string): string => value.trim().replace(/\s+/g, " ").toLowerCase();
 
 export default function MasterRolePage() {
   const [data, setData] = useState<RoleRow[]>(initialRoles);
@@ -59,6 +60,14 @@ export default function MasterRolePage() {
 
     if (!trimmedRole) {
       nextFieldErrors.role = "Role wajib diisi.";
+    }
+
+    const duplicateRole = data.some(
+      (item) => item.id !== editId && normalizeRoleKey(item.role) === normalizeRoleKey(trimmedRole)
+    );
+
+    if (duplicateRole) {
+      nextFieldErrors.role = "Role tersebut sudah ada.";
     }
 
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -108,9 +117,13 @@ export default function MasterRolePage() {
 
   const sortedData = useMemo(() => {
     const rows = [...data];
+    const normalizedSearch = search.toLowerCase();
 
     const filteredRows = search
-      ? rows.filter((row) => row.role.toLowerCase().includes(search.toLowerCase()))
+      ? rows.filter((row) =>
+          String(row.no).includes(normalizedSearch) ||
+          row.role.toLowerCase().includes(normalizedSearch)
+        )
       : rows;
 
     filteredRows.sort((a, b) => sortRows(a, b, sortField, sortOrder));
@@ -167,7 +180,15 @@ export default function MasterRolePage() {
         .map((row, index) => ({
           id: Number(row.id),
           no: Number((row as Partial<RoleRow>).no) || index + 1,
-          role: String(row.role),
+          role: String(row.role).trim().replace(/\s+/g, " "),
+        }))
+        .filter((row, index, rows) => {
+          const key = normalizeRoleKey(row.role);
+          return rows.findIndex((item) => normalizeRoleKey(item.role) === key) === index;
+        })
+        .map((row, index) => ({
+          ...row,
+          no: index + 1,
         }));
 
       if (sanitized.length > 0) {

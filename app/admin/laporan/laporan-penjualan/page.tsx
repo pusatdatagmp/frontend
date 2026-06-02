@@ -103,11 +103,22 @@ export default function Page() {
         let result = [...data];
 
         if (search) {
-            result = result.filter(
-                (item) =>
-                    item.nama_unit.toLowerCase().includes(search.toLowerCase()) ||
-                    item.no_pol.toLowerCase().includes(search.toLowerCase())
-            );
+            const keyword = search.toLowerCase();
+
+            result = result.filter((item, index) => {
+                const rowNumber = String(index + 1);
+                const haystack = [
+                    rowNumber,
+                    item.id,
+                    item.nama_unit,
+                    item.no_pol,
+                    item.jenis_kendaraan,
+                ]
+                    .join(" ")
+                    .toLowerCase();
+
+                return haystack.includes(keyword);
+            });
         }
 
         result.sort((a, b) => {
